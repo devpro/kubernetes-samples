@@ -1,0 +1,5 @@
+controller:
+  config:
+    use-gzip: "false"
+    proxy-read-timeout: "3600"
+    proxy-send-timeout: "3600"

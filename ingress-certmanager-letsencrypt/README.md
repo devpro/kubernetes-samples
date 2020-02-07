@@ -4,55 +4,61 @@
 
 ### Azure
 
-- Create a new DNS zone (poc.automation.kirrk.com)
-  - Add a A record with the IP address (no prefix)
+- Create a new DNS zone and register the Azure DNS name servers in the system that is the owner of the domain (OVH or 1&1 for example)
 
-## Setup
+## Steps
+
+### Install
 
 ```bash
+# /!\ make sure you are on the right namespace
+
 # install nginx
-helm install nginxingress stable/nginx-ingress --namespace default
+helm install nginx stable/nginx-ingress
+
+# you can have a look at the configmap that is created, containing NGINX ingress configuration
+kubectl describe configmap nginxingress-nginx-ingress-controller
 
 # get the ip (wait for it to be created)
-kubectl get svc nginxingress-nginx-ingress-controller -o jsonpath="{.status.loadBalancer.ingress[0].ip}" --namespace default
+kubectl get svc nginx-nginx-ingress-controller -o jsonpath="{.status.loadBalancer.ingress[0].ip}" --namespace mynamespace
 
 # opening the ip in a browser should send you back "default backend - 404" as nothing is defined
 
-# question: add the IP as a A entry in the DNS?
+# Azure: add the IP as a A entry in the DNS
 az network dns record-set a add-record --resource-group myResourceGroup --zone-name MY_CUSTOM_DOMAIN --record-set-name * --ipv4-address MY_EXTERNAL_IP
-
-# install with helm a demo application (here Joomla, a CMS, see https://github.com/helm/charts/tree/master/stable/joomla)
-helm install joomlasample stable/joomla --set joomlaPassword=secretpassword --set mariadb.root.password=secretpassword --set service.type=ClusterIP --set ingress.enabled=true --set ingress.hosts[0].name=joomla.poc.automation.kirrk.com
-
-# I had to force the domain in my host file
-# opening http://joomla.poc.automation.kirrk.com/ works but with a self signed certificate
 
 # create the namespaces (see https://cert-manager.io/docs/installation/kubernetes/)
 helm repo add jetstack https://charts.jetstack.io
 helm repo update
-kubectl apply --validate=false -f https://raw.githubusercontent.com/jetstack/cert-manager/v0.13.0/deploy/manifests/00-crds.yaml --namespace default
+kubectl apply --validate=false -f https://raw.githubusercontent.com/jetstack/cert-manager/v0.13.0/deploy/manifests/00-crds.yaml --namespace mynamespace
 
 # create a cluster issuer
-kubectl apply -f letsencrypt-poc.yaml --namespace default
+kubectl apply -f letsencrypt-poc.yaml --namespace mynamespace
 
 # install cert-manager
-helm install cert-manager --namespace default --version v0.13.0 jetstack/cert-manager --set ingressShim.defaultIssuerName=letsencrypt-poc --set ingressShim.defaultIssuerKind=ClusterIssuer
+helm install cert-manager --namespace mynamespace --version v0.13.0 jetstack/cert-manager --set ingressShim.defaultIssuerName=letsencrypt-poc --set ingressShim.defaultIssuerKind=ClusterIssuer
 
 # check the installation of cert-manager
-kubectl get pods --namespace default
+kubectl get pods --namespace mynamespace
 
-helm upgrade joomlasample stable/joomla --set joomlaPassword=secretpassword --set mariadb.root.password=secretpassword --set service.type=ClusterIP --set ingress.enabled=true --set ingress.certManager=true --set ingress.tls[0].secretName=joomla.local-tls --set ingress.hosts[0].name=joomla.poc.automation.kirrk.com
-
+# use samples to have a try
 helm repo add azure-samples https://azure-samples.github.io/helm-charts/
 
-helm install aks-helloworld azure-samples/aks-helloworld --namespace default
+helm install aks-helloworld azure-samples/aks-helloworld --namespace mynamespace
 
-helm install aks-helloworld-two azure-samples/aks-helloworld --namespace default --set title="AKS Ingress Demo" --set serviceName="aks-helloworld-two"
+helm install aks-helloworld-two azure-samples/aks-helloworld --namespace mynamespace --set title="AKS Ingress Demo" --set serviceName="aks-helloworld-two"
 
-kubectl apply -f hello-world-ingress.yaml --namespace default
+kubectl apply -f hello-world-ingress.yaml --namespace mynamespace
 
+kubectl get certificate --namespace mynamespace
+
+# if the DNS has been correctly configured, then everything should be fine :) and by opening the url you have a valid certificate
+```
+
+### Investigate
+
+```bash
 # See https://cert-manager.io/docs/faq/acme/
-kubectl get certificate --namespace default
 
 kubectl describe certificate tls-secret
 
